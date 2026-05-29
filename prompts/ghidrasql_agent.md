@@ -25,7 +25,10 @@ A comprehensive reference for AI agents to effectively use GhidraSQL — an SQL 
 analysis tables (`funcs`, `instructions`, `pseudocode`, etc.) always refer to
 one active program. Use `project_programs` or `--list-project-programs` to
 enumerate project contents, then choose the active domain path with `--program
-/folder/name` or `--initial-program /folder/name`.
+/folder/name` or `--initial-program /folder/name`. On managed headless
+`libghidra` hosts, you can switch without restarting by closing the current
+program and opening another project program through `.program <path>
+[save|discard|none]` or `POST /program/switch?policy=save`.
 
 ---
 
@@ -1455,6 +1458,7 @@ When running in interactive mode, these dot-commands are available:
 | `.save` | Save pending changes (calls `save_database()`) |
 | `.discard` | Discard pending changes (calls `discard_changes()`) |
 | `.refresh` | Force source refresh and cache invalidation |
+| `.program <path> [save\|discard\|none]` | Switch active project program on managed headless hosts |
 | `.http` | Show HTTP server status |
 | `.http start` | Start HTTP server |
 | `.http stop` | Stop HTTP server |
@@ -1497,8 +1501,22 @@ ghidrasql --url http://localhost:18080 --http --port 9000 --auth mysecret
 | `POST /query` | POST | Execute SQL query (body = raw SQL text) |
 | `GET /status` | GET | Server status |
 | `POST /refresh` | POST | Refresh database |
-| `POST /save` | POST | Save changes |
-| `POST /discard` | POST | Discard changes |
+| `POST /program/switch?policy=save` | POST | Switch active project program; body = Ghidra domain path |
+| `POST /shutdown` | POST | Stop server |
+| `GET /shutdown/status` | GET | Poll shutdown progress |
+
+For program switching, send the domain path as raw request body:
+
+```bash
+curl -X POST "http://127.0.0.1:8081/program/switch?policy=save" \
+  --data "/payload.exe"
+```
+
+Supported policies are `save`, `discard`, and `none`. The endpoint is a
+session-control operation, not SQL: it calls `CloseProgram(policy)`,
+`OpenProgram(program_path)`, then refreshes GhidraSQL caches. It requires a
+managed headless `libghidra` host; attached GUI hosts cannot switch the visible
+active program this way.
 
 **Response format (JSON):**
 ```json

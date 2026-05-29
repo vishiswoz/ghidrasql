@@ -62,11 +62,10 @@ elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/libxsql/CMakeLists.txt")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/external/libxsql" "${CMAKE_CURRENT_BINARY_DIR}/libxsql")
     message(STATUS "ghidrasql: Added libxsql from ghidrasql/external/libxsql")
 else()
-    message(STATUS "ghidrasql: Fetching libxsql from GitHub (shallow clone)...")
+    message(STATUS "ghidrasql: Fetching pinned libxsql from GitHub...")
     FetchContent_Declare(libxsql
         GIT_REPOSITORY https://github.com/0xeb/libxsql.git
-        GIT_TAG        ea11622
-        GIT_SHALLOW    TRUE
+        GIT_TAG        ea11622eeec5ac7e5988364ebfaffefccb1bb3f4
     )
     FetchContent_MakeAvailable(libxsql)
 endif()

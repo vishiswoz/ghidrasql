@@ -56,6 +56,34 @@ CommandResult handle_command(
         return CommandResult::Handled;
     }
 
+    if (input.rfind(".program", 0) == 0) {
+        if (!callbacks.switch_program) {
+            output = "program switching not supported";
+            return CommandResult::Handled;
+        }
+        std::string args = trim(input.substr(8));
+        if (args.empty()) {
+            output = "Usage: .program <domain-path> [save|discard|none]";
+            return CommandResult::Handled;
+        }
+        const auto split = args.find_last_of(" \t");
+        std::string path = args;
+        std::string policy = "save";
+        if (split != std::string::npos) {
+            const std::string maybe_policy = trim(args.substr(split + 1));
+            if (maybe_policy == "save" || maybe_policy == "discard" || maybe_policy == "none") {
+                path = trim(args.substr(0, split));
+                policy = maybe_policy;
+            }
+        }
+        if (path.empty()) {
+            output = "Usage: .program <domain-path> [save|discard|none]";
+            return CommandResult::Handled;
+        }
+        output = callbacks.switch_program(path, policy);
+        return CommandResult::Handled;
+    }
+
     if (input.rfind(".schema", 0) == 0) {
         if (!callbacks.get_schema) {
             output = "schema callback not configured";
@@ -103,6 +131,8 @@ CommandResult handle_command(
             "  .save             save pending changes (source-specific)\n"
             "  .discard          discard pending changes (source-specific)\n"
             "  .refresh          refresh source live readers and invalidate caches\n"
+            "  .program <path> [save|discard|none]\n"
+            "                    switch active project program on managed headless hosts\n"
             "  .quit/.exit/.q    quit the REPL\n"
             "  .help             show this help\n"
             "  .http             show HTTP status\n"

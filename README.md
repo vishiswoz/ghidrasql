@@ -212,9 +212,30 @@ SELECT save_database();
 | `.save` | Save pending changes |
 | `.discard` | Discard pending changes |
 | `.refresh` | Refresh data from Ghidra |
+| `.program <path> [save\|discard\|none]` | Switch active project program on managed headless `libghidra` hosts |
 | `.http` / `.http start` / `.http stop` | Control HTTP server |
 | `.help` | Show help |
 | `.quit` | Exit |
+
+### Active program switching
+
+`libghidra` managed headless hosts can close the current program and open a
+different program from the same Ghidra project. `ghidrasql` exposes that
+through the REPL and HTTP server:
+
+```text
+.program /payload.exe save
+```
+
+```bash
+curl -X POST "http://127.0.0.1:8081/program/switch?policy=save" \
+  --data "/payload.exe"
+```
+
+The switch operation is equivalent to `CloseProgram(policy)` followed by
+`OpenProgram(program_path)`, then a cache refresh. It is only supported by
+managed headless hosts; attached GUI hosts cannot switch the visible active
+program through `libghidra`.
 
 ## SQL Surface
 

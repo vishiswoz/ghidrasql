@@ -233,6 +233,7 @@ bool Source::write_byte(std::int64_t, std::uint8_t) { return false; }
 bool Source::save_database() { return false; }
 bool Source::discard_changes() { return false; }
 bool Source::refresh() { return false; }
+bool Source::switch_program(const std::string&, const std::string&) { return false; }
 int Source::parse_declarations(const std::string&) { return -1; }
 
 std::string Source::decompile(std::int64_t) const { return {}; }

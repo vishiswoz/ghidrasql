@@ -102,6 +102,7 @@ struct CommandCallbacks {
     std::function<std::string()> save_database;
     std::function<std::string()> discard_changes;
     std::function<std::string()> refresh_database;
+    std::function<std::string(const std::string&, const std::string&)> switch_program;
 
     std::function<std::string()> http_status;
     std::function<std::string()> http_start;
@@ -166,6 +167,7 @@ public:
     using QueryFn = std::function<std::string(const std::string&)>;
     using InfoFn = std::function<std::string()>;
     using RefreshFn = std::function<bool()>;
+    using SwitchProgramFn = std::function<bool(const std::string&, const std::string&, std::string&)>;
 
     HttpServer() = default;
     ~HttpServer();
@@ -175,7 +177,12 @@ public:
     HttpServer(HttpServer&&) = delete;
     HttpServer& operator=(HttpServer&&) = delete;
 
-    int start(QueryFn query_fn, InfoFn info_fn, Options options = {}, RefreshFn refresh_fn = {});
+    int start(
+        QueryFn query_fn,
+        InfoFn info_fn,
+        Options options = {},
+        RefreshFn refresh_fn = {},
+        SwitchProgramFn switch_program_fn = {});
     void stop();
     bool is_running() const;
     int port() const;
@@ -190,6 +197,7 @@ private:
     std::unique_ptr<xsql::thinclient::http_query_server> server_;
     InfoFn info_fn_;
     RefreshFn refresh_fn_;
+    SwitchProgramFn switch_program_fn_;
     Options options_;
 
     // Worker state for /health/deep. The wrapper installed by start()

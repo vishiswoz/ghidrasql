@@ -560,6 +560,34 @@ int print_project_programs(ghidrasql::QueryEngine& engine, const std::string& fo
     return result.success ? 0 : 1;
 }
 
+bool switch_program(
+    ghidrasql::QueryEngine& engine,
+    const std::shared_ptr<ghidrasql::Source>& source,
+    const std::string& program_path,
+    const std::string& close_policy,
+    std::string& error)
+{
+    if (!source) {
+        error = "source unavailable";
+        return false;
+    }
+    if (!source->switch_program(program_path, close_policy)) {
+        error = source->last_error();
+        if (error.empty()) {
+            error = "program switching not supported/failed";
+        }
+        return false;
+    }
+    if (!engine.refresh()) {
+        error = source->last_error();
+        if (error.empty()) {
+            error = "program switched, but cache refresh failed";
+        }
+        return false;
+    }
+    return true;
+}
+
 int run_repl(
     ghidrasql::QueryEngine& engine,
     std::shared_ptr<ghidrasql::Source> source,
@@ -568,6 +596,10 @@ int run_repl(
     const std::string& format)
 {
     const bool is_tty = STDIN_IS_TTY();
+
+    auto switch_program_fn = [&](const std::string& path, const std::string& policy, std::string& error) {
+        return switch_program(engine, source, path, policy, error);
+    };
 
     auto http_start = [&]() -> std::string {
         if (http.is_running()) {
@@ -582,7 +614,8 @@ int run_repl(
             },
             [&]() { return engine.info(); },
             http_options,
-            [&]() { return engine.refresh(); });
+            [&]() { return engine.refresh(); },
+            switch_program_fn);
         if (port <= 0) {
             return "failed to start HTTP server";
         }
@@ -628,6 +661,13 @@ int run_repl(
     callbacks.refresh_database = [&]() {
         bool ok = engine.refresh();
         return ok ? std::string("refresh_database: ok") : std::string("refresh_database: not supported/failed");
+    };
+    callbacks.switch_program = [&](const std::string& path, const std::string& policy) {
+        std::string error;
+        const bool ok = switch_program_fn(path, policy, error);
+        return ok
+            ? ("program switched to " + path)
+            : ("program switch failed: " + (error.empty() ? std::string("unknown error") : error));
     };
     callbacks.http_start = http_start;
     callbacks.http_stop = http_stop;
@@ -870,6 +910,10 @@ int run_headless_live_server(const Args& args) {
     http_options.bind_address = args.bind;
     http_options.auth_token = args.auth_token;
 
+    auto switch_program_fn = [&](const std::string& path, const std::string& policy, std::string& error) {
+        return switch_program(engine, source, path, policy, error);
+    };
+
     const int started_port = http.start(
         [&](const std::string& sql) {
             std::vector<ghidrasql::QueryResult> results;
@@ -879,7 +923,8 @@ int run_headless_live_server(const Args& args) {
         },
         [&]() { return engine.info(); },
         http_options,
-        [&]() { return engine.refresh(); });
+        [&]() { return engine.refresh(); },
+        switch_program_fn);
     if (started_port <= 0) {
         std::cerr << "failed to start ghidrasql HTTP server\n";
         const bool save = (args.shutdown != "discard" && args.shutdown != "none");
@@ -1042,6 +1087,9 @@ int main(int argc, char** argv) {
     http_options.auth_token = args.auth_token;
 
     if (args.serve) {
+        auto switch_program_fn = [&](const std::string& path, const std::string& policy, std::string& error) {
+            return switch_program(engine, source, path, policy, error);
+        };
         int started_port = http.start(
             [&](const std::string& sql) {
                 std::vector<ghidrasql::QueryResult> results;
@@ -1051,7 +1099,8 @@ int main(int argc, char** argv) {
             },
             [&]() { return engine.info(); },
             http_options,
-            [&]() { return engine.refresh(); });
+            [&]() { return engine.refresh(); },
+            switch_program_fn);
         if (started_port <= 0) {
             std::cerr << "failed to start HTTP server\n";
             return 1;

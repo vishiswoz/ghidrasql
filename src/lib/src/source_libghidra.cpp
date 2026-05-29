@@ -2121,6 +2121,46 @@ public:
         return ok_or_record_error_locked(rev, "GetRevision");
     }
 
+    bool switch_program(const std::string& program_path, const std::string& close_policy) override {
+        std::lock_guard<std::mutex> lock(mu_);
+        const std::string path = normalize_program_path_arg(program_path);
+        if (path.empty()) {
+            last_error_ = "program path is required";
+            return false;
+        }
+
+        const auto policy = parse_shutdown_policy(close_policy);
+        if (!policy.has_value()) {
+            last_error_ = "invalid close policy: " + close_policy + " (expected save, discard, none, or unspecified)";
+            return false;
+        }
+
+        auto closed = client_.CloseProgram(*policy);
+        if (!closed.ok()) {
+            return ok_or_record_error_locked(closed, "CloseProgram");
+        }
+
+        libghidra::client::OpenProgramRequest req;
+        req.project_path = options_.project_path;
+        req.project_name = options_.project_name;
+        req.program_path = path;
+        req.analyze = options_.analyze;
+        req.read_only = options_.read_only;
+        auto opened = client_.OpenProgram(req);
+        if (!ok_or_record_error_locked(opened, "OpenProgram")) {
+            opened_program_.reset();
+            return false;
+        }
+
+        options_.program_path = path;
+        opened_program_ = *opened.value;
+        opened_project_ = true;
+        mutation_count_ = 0;
+        invalidate_decompile_cache_locked();
+        last_error_.clear();
+        return true;
+    }
+
     int parse_declarations(const std::string& source_text) override {
         std::lock_guard<std::mutex> lock(mu_);
         if (!ensure_session_open_locked()) {
@@ -2255,6 +2295,39 @@ private:
                 last_error_ = "auto-save failed after " + std::to_string(mutation_count_) + " mutations";
             }
         }
+    }
+
+    static std::string normalize_program_path_arg(std::string value) {
+        std::replace(value.begin(), value.end(), '\\', '/');
+        const auto first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            return {};
+        }
+        const auto last = value.find_last_not_of(" \t\r\n");
+        value = value.substr(first, last - first + 1);
+        if (value.empty() || value.front() == '/') {
+            return value;
+        }
+        if (value.find('/') != std::string::npos) {
+            return "/" + value;
+        }
+        return value;
+    }
+
+    static std::optional<libghidra::client::ShutdownPolicy> parse_shutdown_policy(const std::string& policy) {
+        if (policy.empty() || policy == "save") {
+            return libghidra::client::ShutdownPolicy::kSave;
+        }
+        if (policy == "discard") {
+            return libghidra::client::ShutdownPolicy::kDiscard;
+        }
+        if (policy == "none") {
+            return libghidra::client::ShutdownPolicy::kNone;
+        }
+        if (policy == "unspecified") {
+            return libghidra::client::ShutdownPolicy::kUnspecified;
+        }
+        return std::nullopt;
     }
 
     template <typename T>

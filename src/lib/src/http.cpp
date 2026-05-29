@@ -75,6 +75,7 @@ static std::string build_http_help_text() {
         "  POST /shutdown        - Stop server (async; returns immediately)\n"
         "  GET  /shutdown/status - Poll shutdown progress (phase: idle|http_stopping|java_exiting|complete|force_killed)\n"
         "  POST /refresh  - Refresh data from Ghidra\n"
+        "  POST /program/switch?policy=save|discard|none - Switch active project program; body = domain path\n"
         "  GET  /health   - Liveness probe (process up; does not probe the query worker)\n"
         "  GET  /health/deep - Readiness probe (reflects query-worker state)\n\n"
         "Discover Schema:\n"
@@ -102,7 +103,12 @@ HttpServer::~HttpServer() {
     stop();
 }
 
-int HttpServer::start(QueryFn query_fn, InfoFn info_fn, Options options, RefreshFn refresh_fn) {
+int HttpServer::start(
+    QueryFn query_fn,
+    InfoFn info_fn,
+    Options options,
+    RefreshFn refresh_fn,
+    SwitchProgramFn switch_program_fn) {
     if (server_) {
         return server_->port();
     }
@@ -110,6 +116,7 @@ int HttpServer::start(QueryFn query_fn, InfoFn info_fn, Options options, Refresh
     options_ = std::move(options);
     info_fn_ = std::move(info_fn);
     refresh_fn_ = std::move(refresh_fn);
+    switch_program_fn_ = std::move(switch_program_fn);
 
     // Reset worker-state counters so /health/deep starts from a clean slate
     // on each start() (matters across stop()/start() cycles in tests).
@@ -244,6 +251,32 @@ int HttpServer::start(QueryFn query_fn, InfoFn info_fn, Options options, Refresh
             }
             res.set_content(
                 xsql::json{{"success", true}, {"message", "refreshed"}}.dump(),
+                "application/json");
+        });
+
+        svr.Post("/program/switch", [this](const httplib::Request& req, httplib::Response& res) {
+            if (!switch_program_fn_) {
+                res.status = 501;
+                res.set_content(
+                    xsql::json{{"success", false}, {"error", "program switch callback not configured"}}.dump(),
+                    "application/json");
+                return;
+            }
+            std::string policy = "save";
+            if (req.has_param("policy")) {
+                policy = req.get_param_value("policy");
+            }
+            std::string error;
+            const bool ok = switch_program_fn_(req.body, policy, error);
+            if (!ok) {
+                res.status = 500;
+                res.set_content(
+                    xsql::json{{"success", false}, {"error", error.empty() ? "program switch failed" : error}}.dump(),
+                    "application/json");
+                return;
+            }
+            res.set_content(
+                xsql::json{{"success", true}, {"program_path", req.body}, {"policy", policy}}.dump(),
                 "application/json");
         });
     };

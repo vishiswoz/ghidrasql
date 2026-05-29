@@ -933,6 +933,7 @@ public:
     virtual bool save_database();
     virtual bool discard_changes();
     virtual bool refresh();
+    virtual bool switch_program(const std::string& program_path, const std::string& close_policy);
 
     // Bulk type import.
     virtual int parse_declarations(const std::string& source_text);
